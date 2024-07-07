@@ -1,0 +1,207 @@
+This code snippet performs a series of tasks related to web scraping and sentiment analysis. Let's break down what each part of the code does:
+
+### Step-by-Step Explanation:
+
+1. **Import Necessary Libraries**:
+   ```python
+   import selenium
+   from selenium import webdriver
+   from selenium.webdriver.common.by import By
+   import os
+   import pandas
+   ```
+   - `selenium`: Used for automating web browsers.
+   - `webdriver`: Provides methods to interact with a web browser.
+   - `By`: Enumerations to specify how to find elements within a webpage.
+   - `os`: For operating system dependent functionality, used here to handle file paths.
+   - `pandas`: For data manipulation and analysis.
+
+2. **Setting File Paths and Loading Stop Words**:
+   ```python
+   path = os.path.abspath(os.path.dirname(__file__))
+   swd = os.listdir(path + "/StopWords")
+   sw = {}
+   for i in swd:
+       s = open(path + "/StopWords/" + i)
+       s2 = list(s.read().splitlines())
+       for ii in s2:
+           s1 = ii.split("|")
+           for ik in s1:
+               i = ik.strip()
+               if i[0].lower() in sw.keys():
+                   sw[i[0].lower()].append(i.lower())
+               else:
+                   sw[i[0].lower()] = [i.lower()]
+       s.close()
+   ```
+   - Retrieves the absolute path of the current script directory (`path`).
+   - Loads stop words from multiple files in the `StopWords` directory into a dictionary `sw`, categorizing them by the first letter.
+
+3. **Loading Positive and Negative Words**:
+   ```python
+   posi_dict = {}
+   neg_dict = {}
+   p = open(path + "/MasterDictionary/positive-words.txt", "r")
+   pd = list(p.read().splitlines())
+   ap = []
+   for i in pd:
+       if i[0].lower() in sw.keys() and i.lower() in sw[i[0].lower()]:
+           pass
+       else:
+           ap.append(i.lower())
+   for j, i in enumerate(ap):
+       if i[0] not in posi_dict.keys():
+           posi_dict[i[0]] = j
+   p.close()
+
+   n = open(path + "/MasterDictionary/negative-words.txt", "r")
+   nd = list(n.read().splitlines())
+   an = []
+   for i in nd:
+       if i[0].lower() in sw.keys() and i.lower() in sw[i[0].lower()]:
+           pass
+       else:
+           an.append(i.lower())
+   for j, i in enumerate(an):
+       if i[0] not in neg_dict.keys():
+           neg_dict[i[0]] = j
+   n.close()
+   ```
+   - Loads positive and negative words from `positive-words.txt` and `negative-words.txt`.
+   - Filters out stop words from these dictionaries based on categories.
+
+4. **Web Scraping and Text Processing**:
+   ```python
+   ans = []
+   exelinput = pandas.read_excel(path + "/input.xlsx")
+   for i in range(0, len(exelinput)):
+       driver = webdriver.Chrome()
+       inpusite = exelinput.iat[i, 1]
+       inpfn = str(exelinput.iat[i, 0])
+       driver.get(inpusite)
+       l = driver.find_elements(By.TAG_NAME, "p")
+       l2 = driver.find_elements(By.TAG_NAME, "h1")
+       l1 = []
+       for i in l2:
+           if i.text:
+               l1.append(i.text)
+       for i in l:
+           if i.text:
+               l1.append(i.text)
+       l1.pop(-1)
+       l1.pop(-1)
+       l1.pop(-1)
+       a = open(path + "/" + inpfn + ".txt", "w")
+       b = ""
+       for i in l1:
+           j = ""
+           for k in i:
+               if ord(k) in range(32, 127):
+                   j += k
+           b += j
+           b += '\n'
+       a.write(b)
+       a.close()
+       driver.quit()
+   ```
+   - Reads URLs from `input.xlsx`, visits each site using Selenium's WebDriver, collects text from `<p>` and `<h1>` tags, and writes it to a text file named based on the URL ID.
+
+5. **Text Analysis and Sentiment Scoring**:
+   ```python
+   for i in range(0, len(exelinput)):
+       inpusite = exelinput.iat[i, 1]
+       inpfn = str(exelinput.iat[i, 0])
+       a = open(path + "/" + inpfn + ".txt", "r")
+       tw, ps, ns, nofs, cw, ppr, tc, syl = 0, 0, 0, 0, 0, 0, 0, 0
+       i = list(a.read().splitlines())
+       j = len(i)
+       line = []
+       punc = [",", ".", "(", ")", "{", "}", "[", ']', "?", "!"]
+       for k in i:
+           buff = ""
+           for h in range(0, len(k) - 1):
+               if k[h] == " " and not buff:
+                   pass
+               elif (k[h] not in punc):
+                   buff += k[h]
+               if (k[h] == "." or k[h] == "?" or k[h] == "!") and (k[h + 1] == " " or k[h + 1] == "\n") and buff:
+                   lbuff = list(buff.split(" "))
+                   buff = ""
+                   for hh in lbuff:
+                       if hh and hh[0].lower() in sw.keys() and hh.lower() in sw[hh[0].lower()]:
+                           if hh != "US":
+                               if hh.lower() in ['i', 'we', 'my', 'ours', 'us']:
+                                   ppr += 1
+                       else:
+                           buff = buff + hh + " "
+                           tw += 1
+                           count = 0
+                           if hh != "US":
+                               if hh.lower() in ['i', 'we', 'my', 'ours', 'us']:
+                                   ppr += 1
+                           if len(hh) >= 3:
+                               if (hh[-2:0:1] == "es" or hh[-2::1] == "ed"):
+                                   count = -1
+                           for abc in hh:
+                               tc += 1
+                               if abc in ['a', 'e', 'i', 'o', 'u']:
+                                   count += 1
+                           syl += count
+                           if count > 2:
+                               cw += 1
+                           if hh.lower() in ap:
+                               ps += 1
+                           if hh.lower() in an:
+                               ns += 1
+                   line.append(buff)
+                   buff = ""
+                   nofs += 1
+           if buff:
+               lbuff = list(buff.split(" "))
+               buff = ""
+               for hh in lbuff:
+                   if hh and hh[0].lower() in sw.keys() and hh.lower() in sw[hh[0].lower()]:
+                       if hh != "US":
+                           if hh.lower() in ['i', 'we', 'my', 'ours', 'us']:
+                               ppr += 1
+                   else:
+                       buff = buff + hh + " "
+                       tw += 1
+                       count = 0
+                       if hh != "US":
+                           if hh.lower() in ['i', 'we', 'my', 'ours', 'us']:
+                               ppr += 1
+                       if len(hh) >= 3:
+                           if (hh[-2::1] == "es" or hh[-2::1] == "ed"):
+                               count = -1
+                           for abc in hh:
+                               tc += 1
+                               if abc in ['a', 'e', 'i', 'o', 'u']:
+                                   count += 1
+                           syl += count
+                           if count > 2:
+                               cw += 1
+                       if hh.lower() in ap:
+                           ps += 1
+                       if hh.lower() in an:
+                           ns += 1
+               line.append(buff)
+               buff = ""
+               nofs += 1
+       print(inpfn)
+       a.close()
+       pols = (ps - ns) / ((ps + ns) + 0.000001)
+       subs = (ps + ns) / (tw + 0.000001)
+       avgsl = tw / nofs
+       pcw = cw / tw
+       fi = 0.4 * (pcw + avgsl)
+       avgwl = tc / tw
+       sylpw = syl / tw
+       ans.append((inpfn, inpusite, ps, ns, pols, subs, avgsl, pcw, fi, avgsl, cw, tw, sylpw, ppr, avgwl))
+   ```
+   - Reads text from each generated text file, processes it to calculate various metrics such as positive score (`ps`), negative score (`ns`), polarity score (`pols`), subjectivity score (`subs`), average sentence length (`avgsl`), percentage of complex words (`pcw`), FOG index (`fi`), average number of words per sentence (`avgwl`), syllables per word (`sylpw`), and others.
+   - Stores these metrics along with URL information in `ans`.
+
+6. **Output to CSV**:
+   ```python
+   out = pandas.DataFrame(ans, columns=['URL_ID', 'URL', 'POS
